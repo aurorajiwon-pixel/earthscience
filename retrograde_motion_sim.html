@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>행성의 겉보기 운동 — 순행과 역행</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e1e;
+    --panel:#10162e;
+    --panel2:#0d1226;
+    --line:#26304f;
+    --ink:#e9edfa;
+    --muted:#8b94ba;
+    --faint:#5a648c;
+    --pro:#57c7ff;      /* 순행 */
+    --retro:#ff6161;    /* 역행 */
+    --sun:#ffc94d;
+    --earth:#4d9fff;
+    --accent:#9fb4ff;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 700px at 75% -10%, #141c3d 0%, transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    padding:18px clamp(12px, 2.5vw, 28px) 28px;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+
+  header{
+    display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 18px;
+    margin-bottom:14px;
+  }
+  header h1{font-size:clamp(18px,2.4vw,24px); font-weight:700; letter-spacing:-0.01em;}
+  header p{color:var(--muted); font-size:13px;}
+
+  /* ---- 행성 선택 + 상태 ---- */
+  .topbar{
+    display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px 14px; margin-bottom:12px;
+  }
+  .pgroup{display:flex; align-items:center; gap:6px;}
+  .pgroup .glabel{font-size:11px; color:var(--faint); letter-spacing:.12em; margin-right:2px;}
+  .pbtn{
+    border:1px solid var(--line); background:var(--panel2); color:var(--muted);
+    border-radius:9px; padding:6px 12px; font-size:13px; font-weight:500;
+    cursor:pointer; font-family:inherit; transition:all .15s;
+  }
+  .pbtn:hover{border-color:var(--accent); color:var(--ink);}
+  .pbtn.on{background:#1b2650; border-color:var(--accent); color:var(--ink);}
+  .pbtn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .sep{width:1px; height:24px; background:var(--line);}
+
+  .status{display:flex; gap:14px; align-items:center; margin-left:auto; flex-wrap:wrap;}
+  .chip{font-size:12px; color:var(--muted);}
+  .chip b{color:var(--ink); font-weight:600;}
+  .badge{
+    font-size:13px; font-weight:700; padding:4px 12px; border-radius:999px;
+    letter-spacing:.05em;
+  }
+  .badge.pro{background:rgba(87,199,255,.13); color:var(--pro); border:1px solid rgba(87,199,255,.4);}
+  .badge.retro{background:rgba(255,97,97,.13); color:var(--retro); border:1px solid rgba(255,97,97,.45);}
+  .badge.retro.blink{animation:pulse 1.1s ease-in-out infinite;}
+  @keyframes pulse{50%{background:rgba(255,97,97,.3);}}
+  @media (prefers-reduced-motion: reduce){ .badge.retro.blink{animation:none;} }
+  .conj{font-size:12px; color:var(--sun); font-weight:600;}
+
+  /* ---- 레이아웃 ---- */
+  .grid{
+    display:grid; gap:12px;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    grid-template-rows: auto;
+  }
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 14px 10px; display:flex; flex-direction:column; min-width:0;
+  }
+  .panel h2{font-size:13px; font-weight:600; color:var(--accent); letter-spacing:.02em; margin-bottom:2px;}
+  .panel .sub{font-size:11.5px; color:var(--faint); margin-bottom:8px;}
+  .rightcol{display:flex; flex-direction:column; gap:12px; min-width:0;}
+  canvas{width:100%; display:block; border-radius:8px;}
+  #helioC{aspect-ratio: 1 / 1; max-height:640px;}
+  #skyC{aspect-ratio: 16 / 8;}
+  #graphC{aspect-ratio: 16 / 8;}
+
+  .legend{display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:11.5px; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+
+  /* ---- 컨트롤 ---- */
+  .controls{
+    display:flex; flex-wrap:wrap; gap:12px 20px; align-items:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px 16px; margin-top:12px;
+  }
+  .cbtn{
+    border:1px solid var(--line); background:#1b2650; color:var(--ink);
+    border-radius:9px; padding:7px 16px; font-size:13px; font-weight:600;
+    cursor:pointer; font-family:inherit; min-width:88px;
+  }
+  .cbtn.secondary{background:var(--panel2); color:var(--muted); font-weight:500;}
+  .cbtn:hover{border-color:var(--accent);}
+  .cbtn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .ctl{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);}
+  input[type=range]{accent-color:var(--accent); width:130px;}
+  input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px;}
+  label{cursor:pointer; user-select:none;}
+
+  .note{
+    margin-top:12px; font-size:12.5px; line-height:1.75; color:var(--muted);
+    background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 16px;
+  }
+  .note b{color:var(--ink);}
+  .note .k-pro{color:var(--pro); font-weight:600;}
+  .note .k-retro{color:var(--retro); font-weight:600;}
+
+  @media (max-width: 940px){
+    .grid{grid-template-columns:1fr;}
+    .status{margin-left:0;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>행성의 겉보기 운동 — 순행과 역행</h1>
+  <p>공전 속도의 차이가 만드는 시선 방향의 역전</p>
+</header>
+
+<div class="topbar">
+  <div class="pgroup">
+    <span class="glabel">내행성</span>
+    <button class="pbtn" data-p="mercury">수성</button>
+    <button class="pbtn" data-p="venus">금성</button>
+  </div>
+  <div class="sep"></div>
+  <div class="pgroup">
+    <span class="glabel">외행성</span>
+    <button class="pbtn on" data-p="mars">화성</button>
+    <button class="pbtn" data-p="jupiter">목성</button>
+    <button class="pbtn" data-p="saturn">토성</button>
+  </div>
+  <div class="status">
+    <span class="chip">경과 <b class="mono" id="stTime">0일</b></span>
+    <span class="chip">이각 <b class="mono" id="stElong">0°</b></span>
+    <span class="conj" id="stConj"></span>
+    <span class="badge pro" id="stBadge">순행</span>
+  </div>
+</div>
+
+<div class="grid">
+  <section class="panel">
+    <h2>① 태양 중심에서 본 실제 운동 (공전 궤도)</h2>
+    <div class="sub">일정한 간격으로 지구·행성의 위치에 번호를 남기고, 시선을 천구(배경 별)까지 연장합니다.</div>
+    <canvas id="helioC"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--earth)"></span>지구</span>
+      <span><span class="dot" id="lgPlanet" style="background:#e8663c"></span><span id="lgPlanetName">화성</span></span>
+      <span><span class="dot" style="background:var(--pro)"></span>천구에 기록된 위치: 순행</span>
+      <span><span class="dot" style="background:var(--retro)"></span>역행</span>
+    </div>
+  </section>
+
+  <div class="rightcol">
+    <section class="panel">
+      <h2>② 지구에서 본 하늘 — 겉보기 경로</h2>
+      <div class="sub">배경 별에 대한 행성의 겉보기 위치 (황위 축은 확대되어 있음)</div>
+      <canvas id="skyC"></canvas>
+    </section>
+    <section class="panel">
+      <h2>③ 겉보기 황경의 시간 변화</h2>
+      <div class="sub">그래프가 오른쪽 위로 오르면 순행, 내려가면 역행</div>
+      <canvas id="graphC"></canvas>
+    </section>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="cbtn" id="btnPlay">일시정지</button>
+  <div class="ctl">
+    <span>속도</span>
+    <input type="range" id="speed" min="-2" max="3" step="0.25" value="0">
+    <span class="mono" id="speedVal" style="min-width:42px;">×1.0</span>
+  </div>
+  <button class="cbtn secondary" id="btnMark">번호 기록 다시 시작</button>
+  <button class="cbtn secondary" id="btnReset">전체 초기화</button>
+  <div class="ctl"><input type="checkbox" id="chkSight" checked><label for="chkSight">시선 표시</label></div>
+  <div class="ctl"><input type="checkbox" id="chkNum" checked><label for="chkNum">번호 기록</label></div>
+</div>
+
+<div class="note" id="noteBox"></div>
+
+<script>
+"use strict";
+/* ================= 상수 · 행성 자료 ================= */
+const TAU = Math.PI*2, D2R = Math.PI/180;
+const EARTH = { a:1.000, T:365.256 };
+const PLANETS = {
+  mercury:{ name:"수성", type:"inner", a:0.387, T:87.97,   inc:7.00, color:"#c9c9d6", markInt:6  },
+  venus:  { name:"금성", type:"inner", a:0.723, T:224.70,  inc:3.39, color:"#f0d08a", markInt:12 },
+  mars:   { name:"화성", type:"outer", a:1.524, T:686.98,  inc:1.85, color:"#e8663c", markInt:20 },
+  jupiter:{ name:"목성", type:"outer", a:5.203, T:4332.6,  inc:1.30, color:"#d9a066", markInt:30 },
+  saturn: { name:"토성", type:"outer", a:9.537, T:10759,   inc:2.49, color:"#e6c98a", markInt:34 }
+};
+const MAX_MARKS = 12;
+
+/* ================= 상태 ================= */
+let cur = "mars";
+let t = 0, playing = true, speedMul = 1;
+let theta_e0 = -Math.PI/2, theta_p0 = 0, node = 0;
+let samples = [];       // {t, dir, lamU, beta, retro}
+let marks = [];         // {n, ex,ey, px,py, dir, retro}
+let events = [];        // {t, label}
+let nextMarkT = 0, markSeq = 0;
+let lamU = null, lastLam = null, retroNow = false;
+let lastSampleT = -1e9;
+let prevD0 = null, prevD180 = null;
+let elongDeg = 0;
+
+const P = () => PLANETS[cur];
+const omE = () => TAU/EARTH.T;
+const omP = () => TAU/P().T;
+const span = () => P().markInt * MAX_MARKS;        // 관측 기록 전체 기간(일)
+const graphWin = () => span() * 1.25;
+const daysPerSec = () => span() / 22;              // ×1 속도에서 전체 기록 ≈ 22초
+
+function wrapPi(a){ a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; }
+
+/* ================= 초기화 ================= */
+function resetSim(){
+  const p = P();
+  t = 0; samples = []; marks = []; events = [];
+  markSeq = 0; nextMarkT = 0; lastSampleT = -1e9;
+  lamU = null; lastLam = null; retroNow = false;
+  prevD0 = null; prevD180 = null;
+  // 충(외행성) 또는 내합(내행성)이 6번째 기록 근처에 오도록 초기 위상 설정
+  const alignT = p.markInt * 5.5;
+  theta_p0 = theta_e0 - (omP() - omE()) * alignT;
+  // 승교점: 회합 시점에서 60° 떨어진 곳 → 겉보기 경로가 고리/S자 모양이 되도록
+  node = (theta_p0 + omP()*alignT) - 60*D2R;
+  stepPhysics(0.0001);
+  updateNote();
+  syncLegend();
+}
+
+/* ================= 물리 계산 ================= */
+function positions(tt){
+  const p = P();
+  const te = theta_e0 + omE()*tt;
+  const tp = theta_p0 + omP()*tt;
+  const ex = EARTH.a*Math.cos(te), ey = EARTH.a*Math.sin(te);
+  const px = p.a*Math.cos(tp),     py = p.a*Math.sin(tp);
+  const pz = p.a*Math.sin(p.inc*D2R)*Math.sin(tp - node);
+  return {te, tp, ex, ey, px, py, pz};
+}
+
+function stepPhysics(dt){
+  // dt(일)만큼 진행. 정확한 역행 판정을 위해 1일 이하로 분할
+  let rem = dt;
+  while (rem > 1e-9){
+    const h = Math.min(rem, 1); rem -= h;
+    t += h;
+    const s = positions(t);
+    const dx = s.px - s.ex, dy = s.py - s.ey, dz = s.pz;
+    const lam = Math.atan2(dy, dx);
+    const beta = Math.atan2(dz, Math.hypot(dx, dy));
+    if (lamU === null){ lamU = lam; lastLam = lam; }
+    const dLam = wrapPi(lam - lastLam);
+    lamU += dLam; lastLam = lam;
+    retroNow = dLam < -1e-9;
+    // 이각
+    const se = Math.hypot(s.ex, s.ey), sd = Math.hypot(dx, dy, dz);
+    elongDeg = Math.acos(Math.max(-1, Math.min(1, (-s.ex*dx - s.ey*dy) / (se*sd)))) / D2R;
+    // 회합 사건 (충·합 / 내합·외합)
+    const d0 = wrapPi(s.tp - s.te), d180 = wrapPi(s.tp - s.te - Math.PI);
+    const inner = P().type === "inner";
+    if (prevD0 !== null && prevD0 * d0 < 0 && Math.abs(d0) < 0.5)
+      events.push({t, label: inner ? "내합" : "충"});
+    if (prevD180 !== null && prevD180 * d180 < 0 && Math.abs(d180) < 0.5)
+      events.push({t, label: inner ? "외합" : "합"});
+    prevD0 = d0; prevD180 = d180;
+    // 표본 저장
+    if (t - lastSampleT >= span()/900){
+      samples.push({t, dir: lam, lamU, beta, retro: retroNow});
+      lastSampleT = t;
+      const w = graphWin();
+      while (samples.length && samples[0].t < t - w) samples.shift();
+      while (events.length && events[0].t < t - w) events.shift();
+    }
+    // 번호 기록
+    if (document.getElementById("chkNum").checked && markSeq < MAX_MARKS && t >= nextMarkT){
+      markSeq++;
+      marks.push({n: markSeq, ex:s.ex, ey:s.ey, px:s.px, py:s.py, dir:lam, retro:retroNow});
+      nextMarkT = t + P().markInt;
+    }
+  }
+}
+
+/* ================= 캔버스 도우미 ================= */
+function fitCanvas(c){
+  const dpr = window.devicePixelRatio || 1;
+  const r = c.getBoundingClientRect();
+  const w = Math.round(r.width*dpr), h = Math.round(r.height*dpr);
+  if (c.width !== w || c.height !== h){ c.width = w; c.height = h; }
+  const g = c.getContext("2d");
+  g.setTransform(dpr,0,0,dpr,0,0);
+  return {g, W:r.width, H:r.height};
+}
+// 결정적 별 배경
+function drawStars(g, W, H, seed, n){
+  let s = seed;
+  const rnd = () => (s = (s*16807) % 2147483647) / 2147483647;
+  g.save();
+  for (let i=0;i<n;i++){
+    const x = rnd()*W, y = rnd()*H, r = rnd()*0.9+0.3;
+    g.globalAlpha = 0.12 + rnd()*0.3;
+    g.fillStyle = "#cfd8ff";
+    g.beginPath(); g.arc(x,y,r,0,TAU); g.fill();
+  }
+  g.restore();
+}
+
+/* ================= ① 태양 중심 뷰 ================= */
+const helioC = document.getElementById("helioC");
+function drawHelio(){
+  const {g, W, H} = fitCanvas(helioC);
+  g.clearRect(0,0,W,H);
+  drawStars(g, W, H, 7, 90);
+
+  const p = P();
+  const maxA = Math.max(EARTH.a, p.a);
+  const Rring = maxA * 1.30;
+  const sc = (Math.min(W,H)/2 - 26) / Rring;
+  const cx = W/2, cy = H/2;
+  const X = x => cx + x*sc, Y = y => cy - y*sc;
+  const showSight = document.getElementById("chkSight").checked;
+
+  // 천구
+  g.strokeStyle = "rgba(159,180,255,.30)"; g.lineWidth = 1.4;
+  g.setLineDash([2,5]);
+  g.beginPath(); g.arc(cx, cy, Rring*sc, 0, TAU); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = "rgba(139,148,186,.85)"; g.font = "11px 'IBM Plex Sans KR'";
+  g.textAlign = "center";
+  g.fillText("천구 (배경 별)", cx, cy - Rring*sc + 16);
+
+  // 궤도
+  g.strokeStyle = "rgba(122,138,190,.35)"; g.lineWidth = 1;
+  g.beginPath(); g.arc(cx, cy, EARTH.a*sc, 0, TAU); g.stroke();
+  g.beginPath(); g.arc(cx, cy, p.a*sc, 0, TAU); g.stroke();
+  // 공전 방향 화살표(반시계) — 행성 궤도 위쪽에
+  arrow(g, X(0), Y(p.a), X(-0.06*maxA), Y(p.a*0.999), "rgba(122,138,190,.6)");
+
+  // 태양
+  const grad = g.createRadialGradient(cx,cy,1, cx,cy,13);
+  grad.addColorStop(0,"#fff3c9"); grad.addColorStop(0.5,"#ffc94d"); grad.addColorStop(1,"rgba(255,201,77,0)");
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(cx,cy,13,0,TAU); g.fill();
+  g.fillStyle = "rgba(233,237,250,.8)"; g.font = "11px 'IBM Plex Sans KR'";
+  g.fillText("태양", cx, cy+24);
+
+  // 천구 위 연속 궤적 (표본)
+  const winT = span();
+  for (const s of samples){
+    if (s.t < t - winT) continue;
+    const age = (t - s.t) / winT;
+    const pt = ringPoint(s, Rring);
+    g.globalAlpha = 0.75*(1-age) + 0.08;
+    g.fillStyle = s.retro ? "#ff6161" : "#57c7ff";
+    g.beginPath(); g.arc(X(pt.x), Y(pt.y), 1.6, 0, TAU); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  // 번호 기록: 시선 + 지구/행성 위치 + 천구 번호
+  g.font = "600 10.5px 'IBM Plex Mono'";
+  for (const m of marks){
+    const col = m.retro ? "#ff6161" : "#57c7ff";
+    const rp = ringPoint({dir:m.dir, ex:m.ex, ey:m.ey}, Rring, m);
+    if (showSight){
+      g.strokeStyle = m.retro ? "rgba(255,97,97,.34)" : "rgba(87,199,255,.30)";
+      g.lineWidth = 1;
+      g.beginPath(); g.moveTo(X(m.ex), Y(m.ey)); g.lineTo(X(rp.x), Y(rp.y)); g.stroke();
+    }
+    // 지구·행성 위치 점 + 번호
+    g.fillStyle = "rgba(77,159,255,.9)";
+    g.beginPath(); g.arc(X(m.ex), Y(m.ey), 2.6, 0, TAU); g.fill();
+    g.fillStyle = p.color;
+    g.beginPath(); g.arc(X(m.px), Y(m.py), 2.6, 0, TAU); g.fill();
+    numLabel(g, X(m.ex), Y(m.ey), m.n, "rgba(160,200,255,.95)", cx, cy, -12);
+    numLabel(g, X(m.px), Y(m.py), m.n, "rgba(233,237,250,.85)", cx, cy, 12);
+    // 천구 번호 (핵심!)
+    g.fillStyle = col;
+    g.beginPath(); g.arc(X(rp.x), Y(rp.y), 3.2, 0, TAU); g.fill();
+    numLabel(g, X(rp.x), Y(rp.y), m.n, col, cx, cy, 14, true);
+  }
+
+  // 현재 시선 (굵게)
+  const now = positions(t);
+  const lam = Math.atan2(now.py - now.ey, now.px - now.ex);
+  const rp = ringPoint({dir:lam, ex:now.ex, ey:now.ey}, Rring);
+  if (showSight){
+    g.strokeStyle = retroNow ? "rgba(255,97,97,.9)" : "rgba(87,199,255,.85)";
+    g.lineWidth = 1.8;
+    g.beginPath(); g.moveTo(X(now.ex), Y(now.ey)); g.lineTo(X(rp.x), Y(rp.y)); g.stroke();
+    g.fillStyle = retroNow ? "#ff6161" : "#57c7ff";
+    g.beginPath(); g.arc(X(rp.x), Y(rp.y), 4.5, 0, TAU); g.fill();
+  }
+
+  // 지구·행성 현재 위치
+  body(g, X(now.ex), Y(now.ey), 6, "#4d9fff", "지구");
+  body(g, X(now.px), Y(now.py), 6.5, p.color, p.name);
+
+  function ringPoint(s, R){
+    // 지구(ex,ey)에서 dir 방향으로 반지름 R 원과의 교점
+    const ux = Math.cos(s.dir), uy = Math.sin(s.dir);
+    const b = s.ex*ux + s.ey*uy;
+    const c = s.ex*s.ex + s.ey*s.ey - R*R;
+    const sRoot = -b + Math.sqrt(Math.max(0, b*b - c));
+    return {x: s.ex + sRoot*ux, y: s.ey + sRoot*uy};
+  }
+  function numLabel(g,x,y,n,col,cx,cy,off,outward){
+    const ang = Math.atan2(y-cy, x-cx);
+    const d = outward ? off : off;
+    g.fillStyle = col;
+    g.fillText(n, x + Math.cos(ang)*d, y + Math.sin(ang)*d + 3.5);
+  }
+  function body(g,x,y,r,col,label){
+    g.fillStyle = col;
+    g.beginPath(); g.arc(x,y,r,0,TAU); g.fill();
+    g.strokeStyle = "rgba(255,255,255,.5)"; g.lineWidth = 1;
+    g.beginPath(); g.arc(x,y,r,0,TAU); g.stroke();
+    g.fillStyle = "#e9edfa"; g.font = "600 11.5px 'IBM Plex Sans KR'";
+    g.fillText(label, x, y - r - 6);
+  }
+  function arrow(g,x1,y1,x2,y2,col){
+    g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+    const a = Math.atan2(y2-y1, x2-x1);
+    g.beginPath();
+    g.moveTo(x2,y2);
+    g.lineTo(x2 - 7*Math.cos(a-0.4), y2 - 7*Math.sin(a-0.4));
+    g.lineTo(x2 - 7*Math.cos(a+0.4), y2 - 7*Math.sin(a+0.4));
+    g.closePath(); g.fill();
+  }
+}
+
+/* ================= ② 하늘 뷰 (겉보기 경로) ================= */
+const skyC = document.getElementById("skyC");
+function drawSky(){
+  const {g, W, H} = fitCanvas(skyC);
+  g.clearRect(0,0,W,H);
+  g.fillStyle = "#0b1024"; g.fillRect(0,0,W,H);
+  drawStars(g, W, H, 21, 60);
+
+  const winT = span();
+  const pts = samples.filter(s => s.t >= t - winT);
+  if (pts.length < 2) return;
+
+  const padL = 14, padR = 14, padT = 16, padB = 26;
+  let minL = Infinity, maxL = -Infinity, maxB = 0;
+  for (const s of pts){
+    if (s.lamU < minL) minL = s.lamU;
+    if (s.lamU > maxL) maxL = s.lamU;
+    if (Math.abs(s.beta) > maxB) maxB = Math.abs(s.beta);
+  }
+  const midL = (minL+maxL)/2;
+  const halfL = Math.max((maxL-minL)/2, 6*D2R) * 1.15;
+  maxB = Math.max(maxB, 0.4*D2R) * 1.3;
+  const X = l => padL + ((l - (midL-halfL)) / (2*halfL)) * (W-padL-padR);
+  const Y = b => H/2 - (b/maxB) * (H-padT-padB)/2;
+
+  // 황도선
+  g.strokeStyle = "rgba(159,180,255,.28)"; g.lineWidth = 1; g.setLineDash([3,5]);
+  g.beginPath(); g.moveTo(padL, Y(0)); g.lineTo(W-padR, Y(0)); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = "rgba(139,148,186,.8)"; g.font = "10.5px 'IBM Plex Sans KR'";
+  g.textAlign = "left";
+  g.fillText("황도", padL+2, Y(0)-5);
+  g.textAlign = "right";
+  g.fillText("황경 증가 = 동쪽(순행 방향) →", W-padR-2, H-8);
+
+  // 궤적: 순행/역행 색 구분
+  for (let i=1;i<pts.length;i++){
+    const a = pts[i-1], b = pts[i];
+    const age = (t - b.t)/winT;
+    g.strokeStyle = b.retro ? "#ff6161" : "#57c7ff";
+    g.globalAlpha = 0.9*(1-age) + 0.1;
+    g.lineWidth = b.retro ? 2.4 : 1.8;
+    g.beginPath(); g.moveTo(X(a.lamU), Y(a.beta)); g.lineTo(X(b.lamU), Y(b.beta)); g.stroke();
+  }
+  g.globalAlpha = 1;
+
+  // 현재 위치
+  const last = pts[pts.length-1];
+  g.fillStyle = P().color;
+  g.beginPath(); g.arc(X(last.lamU), Y(last.beta), 5, 0, TAU); g.fill();
+  g.strokeStyle = "rgba(255,255,255,.6)"; g.lineWidth = 1;
+  g.beginPath(); g.arc(X(last.lamU), Y(last.beta), 5, 0, TAU); g.stroke();
+}
+
+/* ================= ③ 황경-시간 그래프 ================= */
+const graphC = document.getElementById("graphC");
+function drawGraph(){
+  const {g, W, H} = fitCanvas(graphC);
+  g.clearRect(0,0,W,H);
+  g.fillStyle = "#0b1024"; g.fillRect(0,0,W,H);
+
+  const winT = graphWin();
+  const pts = samples;
+  if (pts.length < 2) return;
+  const t0 = Math.max(pts[0].t, t - winT), t1 = t;
+  const padL = 46, padR = 12, padT = 12, padB = 24;
+  let minY = Infinity, maxY = -Infinity;
+  for (const s of pts){ if (s.t < t0) continue;
+    if (s.lamU < minY) minY = s.lamU; if (s.lamU > maxY) maxY = s.lamU; }
+  const spanY = Math.max(maxY-minY, 12*D2R);
+  minY -= spanY*0.08; maxY += spanY*0.08;
+  const X = tt => padL + ((tt-t0)/(t1-t0||1))*(W-padL-padR);
+  const Y = l => H-padB - ((l-minY)/(maxY-minY))*(H-padT-padB);
+
+  // y축 눈금 (도 단위, 0~360 표기)
+  g.font = "10px 'IBM Plex Mono'"; g.textAlign = "right";
+  const degMin = minY/D2R, degMax = maxY/D2R;
+  const step = niceStep((degMax-degMin)/4);
+  for (let d = Math.ceil(degMin/step)*step; d <= degMax; d += step){
+    const y = Y(d*D2R);
+    g.strokeStyle = "rgba(122,138,190,.15)";
+    g.beginPath(); g.moveTo(padL, y); g.lineTo(W-padR, y); g.stroke();
+    g.fillStyle = "rgba(139,148,186,.85)";
+    g.fillText(((d%360)+360)%360 + "°", padL-6, y+3);
+  }
+  // x축 라벨
+  g.textAlign = "center"; g.fillStyle = "rgba(139,148,186,.85)";
+  g.fillText("시간 →", W - 40, H - 8);
+  g.save(); g.translate(12, H/2); g.rotate(-Math.PI/2);
+  g.fillText("겉보기 황경", 0, 0); g.restore();
+
+  // 회합 사건 표시 (충/합/내합/외합)
+  for (const ev of events){
+    if (ev.t < t0) continue;
+    const x = X(ev.t);
+    g.strokeStyle = "rgba(255,201,77,.5)"; g.setLineDash([4,4]);
+    g.beginPath(); g.moveTo(x, padT); g.lineTo(x, H-padB); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = "#ffc94d"; g.font = "600 10.5px 'IBM Plex Sans KR'";
+    g.fillText(ev.label, x, padT + 10);
+  }
+
+  // 곡선
+  let started = false;
+  for (let i=1;i<pts.length;i++){
+    const a = pts[i-1], b = pts[i];
+    if (b.t < t0) continue;
+    g.strokeStyle = b.retro ? "#ff6161" : "#57c7ff";
+    g.lineWidth = b.retro ? 2.6 : 1.8;
+    g.beginPath(); g.moveTo(X(a.t), Y(a.lamU)); g.lineTo(X(b.t), Y(b.lamU)); g.stroke();
+    started = true;
+  }
+  if (started){
+    const last = pts[pts.length-1];
+    g.fillStyle = retroNow ? "#ff6161" : "#57c7ff";
+    g.beginPath(); g.arc(X(last.t), Y(last.lamU), 4, 0, TAU); g.fill();
+  }
+  function niceStep(x){
+    const c = [1,2,5,10,15,30,45,60,90];
+    for (const v of c) if (x <= v) return v;
+    return 90;
+  }
+}
+
+/* ================= 상태 표시 ================= */
+function updateStatus(){
+  document.getElementById("stTime").textContent =
+    t < 730 ? Math.round(t) + "일" : (t/365.25).toFixed(2) + "년";
+  document.getElementById("stElong").textContent = elongDeg.toFixed(0) + "°";
+  const b = document.getElementById("stBadge");
+  if (retroNow){ b.textContent = "역행"; b.className = "badge retro blink"; }
+  else { b.textContent = "순행"; b.className = "badge pro"; }
+  // 회합 근접 표시
+  const inner = P().type === "inner";
+  let conj = "";
+  if (prevD0 !== null && Math.abs(prevD0) < 6*D2R) conj = inner ? "★ 내합 부근" : "★ 충 부근";
+  else if (prevD180 !== null && Math.abs(prevD180) < 6*D2R) conj = inner ? "외합 부근" : "합 부근";
+  document.getElementById("stConj").textContent = conj;
+}
+
+function updateNote(){
+  const p = P();
+  const inner = p.type === "inner";
+  document.getElementById("noteBox").innerHTML = inner
+    ? `<b>${p.name}(내행성)의 역행</b> — ${p.name}은 지구보다 안쪽 궤도를 공전 주기 <b>${p.T.toFixed(0)}일</b>로 돌기 때문에 지구(365일)보다 <b>공전 속도가 빠릅니다</b>. ${p.name}이 지구를 추월하는 <b>내합 부근</b>에서 시선 방향이 거꾸로 쓸려가며, 배경 별에 대해 서쪽으로 이동하는 <span class="k-retro">역행</span>이 나타납니다. 그 외 구간은 동쪽으로 이동하는 <span class="k-pro">순행</span>입니다. 역행이 시작되고 끝나는 순간, 잠시 멈춘 것처럼 보이는 지점이 <b>유(留)</b>입니다.`
+    : `<b>${p.name}(외행성)의 역행</b> — ${p.name}은 지구보다 바깥 궤도를 공전 주기 <b>${(p.T/365.25).toFixed(1)}년</b>으로 돌기 때문에 지구보다 <b>공전 속도가 느립니다</b>. 지구가 ${p.name}을 안쪽에서 추월하는 <b>충 부근</b>에서 시선 방향이 거꾸로 쓸려가며, 배경 별에 대해 서쪽으로 이동하는 <span class="k-retro">역행</span>이 나타납니다. 그 외 구간은 동쪽으로 이동하는 <span class="k-pro">순행</span>입니다. 역행이 시작되고 끝나는 순간, 잠시 멈춘 것처럼 보이는 지점이 <b>유(留)</b>입니다.`;
+}
+
+function syncLegend(){
+  document.getElementById("lgPlanet").style.background = P().color;
+  document.getElementById("lgPlanetName").textContent = P().name;
+}
+
+/* ================= 이벤트 ================= */
+document.querySelectorAll(".pbtn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".pbtn").forEach(b=>b.classList.remove("on"));
+    btn.classList.add("on");
+    cur = btn.dataset.p;
+    resetSim();
+  });
+});
+document.getElementById("btnPlay").addEventListener("click", e=>{
+  playing = !playing;
+  e.target.textContent = playing ? "일시정지" : "재생";
+});
+document.getElementById("speed").addEventListener("input", e=>{
+  speedMul = Math.pow(2, parseFloat(e.target.value));
+  document.getElementById("speedVal").textContent = "×" + (speedMul<1 ? speedMul.toFixed(2) : speedMul.toFixed(1));
+});
+document.getElementById("btnMark").addEventListener("click", ()=>{
+  marks = []; markSeq = 0; nextMarkT = t;
+});
+document.getElementById("btnReset").addEventListener("click", resetSim);
+
+/* ================= 루프 ================= */
+let lastTs = null;
+function frame(ts){
+  if (lastTs === null) lastTs = ts;
+  const dtSec = Math.min((ts - lastTs)/1000, 0.1);
+  lastTs = ts;
+  if (playing) stepPhysics(dtSec * daysPerSec() * speedMul);
+  drawHelio(); drawSky(); drawGraph(); updateStatus();
+  requestAnimationFrame(frame);
+}
+resetSim();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
